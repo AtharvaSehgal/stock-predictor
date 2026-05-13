@@ -31,8 +31,7 @@ def get_nse_session():
     session = requests.Session()
     session.headers.update(HEADERS)
     try:
-        session.get('https://www.nseindia.com', timeout=10)
-        time.sleep(1)
+        session.get('https://www.nseindia.com', timeout=5)  # 5 sec max
     except:
         pass
     return session
@@ -70,11 +69,9 @@ def get_stock_data(symbol: str, period_days: int = 365) -> pd.DataFrame:
 
 
 def _fetch_stooq(symbol: str, period_days: int) -> pd.DataFrame:
-    """Fetch from Stooq — free, reliable, no rate limits."""
+    """Fetch from Stooq with hard timeout."""
     try:
-        # Stooq uses different symbol format
         sym = symbol.replace('.NS', '.IN').replace('.BO', '.IN').lower()
-
         end = datetime.today()
         start = end - timedelta(days=period_days)
 
@@ -86,7 +83,10 @@ def _fetch_stooq(symbol: str, period_days: int) -> pd.DataFrame:
             f"&i=d"
         )
 
-        df = pd.read_csv(url)
+        # Hard 8 second timeout
+        resp = requests.get(url, timeout=8, headers=HEADERS)
+        from io import StringIO
+        df = pd.read_csv(StringIO(resp.text))
 
         if df.empty or 'Close' not in df.columns:
             return None
@@ -147,10 +147,9 @@ def _fetch_nse(symbol: str, period_days: int) -> pd.DataFrame:
 
 
 def _fetch_yfinance_safe(symbol: str, period_days: int) -> pd.DataFrame:
-    """yfinance as last resort with safe period strings."""
+    """yfinance as last resort."""
     try:
         import yfinance as yf
-        time.sleep(3)  # wait before trying
 
         period_str = (
             "2y" if period_days >= 500 else
@@ -159,7 +158,7 @@ def _fetch_yfinance_safe(symbol: str, period_days: int) -> pd.DataFrame:
         )
 
         ticker = yf.Ticker(symbol)
-        df = ticker.history(period=period_str)
+        df = ticker.history(period=period_str, timeout=8)
 
         if df.empty:
             return None
